@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>STOK ADI — Merger Otomatis</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,300&display=swap');
+
+:root {
+  --bg: #0a0c10;
+  --card: #12151c;
+  --card2: #181c26;
+  --border: #242838;
+  --border2: #2e3448;
+  --accent: #00e5a0;
+  --blue: #4d9fff;
+  --warn: #ffb347;
+  --err: #ff5c5c;
+  --text: #dde3f0;
+  --sub: #7a85a3;
+  --mono: 'Space Mono', monospace;
+  --sans: 'DM Sans', sans-serif;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  min-height: 100vh;
+  padding: 48px 20px 80px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* dot grid bg */
+body::before {
+  content: '';
+  position: fixed; inset: 0;
+  background-image: radial-gradient(circle, rgba(0,229,160,0.07) 1px, transparent 1px);
+  background-size: 32px 32px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.wrap { width: 100%; max-width: 780px; position: relative; z-index: 1; }
+
+/* ── HEADER ── */
+.hdr { text-align: center; margin-bottom: 52px; }
+.pill {
+  display: inline-flex; align-items: center; gap: 7px;
+  background: rgba(0,229,160,0.08); border: 1px solid rgba(0,229,160,0.25);
+  border-radius: 100px; padding: 5px 14px;
+  font-family: var(--mono); font-size: 10px; letter-spacing: .12em;
+  color: var(--accent); text-transform: uppercase; margin-bottom: 18px;
+}
+.pill::before { content: '●'; font-size: 7px; animation: blink 1.4s infinite; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.2} }
+h1 {
+  font-family: var(--mono); font-size: clamp(24px, 5vw, 38px);
+  font-weight: 700; line-height: 1.15; margin-bottom: 12px;
+  color: var(--text);
+}
+h1 em { font-style: normal; color: var(--accent); }
+.sub-title { color: var(--sub); font-size: 14px; font-weight: 300; }
+
+/* ── UPLOAD GRID ── */
+.upload-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 20px; }
+@media(max-width:540px) { .upload-grid { grid-template-columns: 1fr; } }
+
+.ucard {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 22px;
+  transition: border-color .25s, box-shadow .25s;
+}
+.ucard.done { border-color: var(--accent); box-shadow: 0 0 28px rgba(0,229,160,0.09); }
+.ucard.done .step-n { color: var(--accent); }
+
+.step-n { font-family: var(--mono); font-size: 10px; letter-spacing: .1em; color: var(--sub); margin-bottom: 6px; }
+.step-title { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 4px; }
+.step-hint { font-size: 12px; color: var(--sub); line-height: 1.5; margin-bottom: 14px; }
+
+.dropzone {
+  border: 1.5px dashed var(--border2);
+  border-radius: 8px;
+  background: var(--card2);
+  padding: 18px 14px;
+  text-align: center;
+  cursor: pointer;
+  position: relative;
+  transition: border-color .2s, background .2s;
+}
+.dropzone:hover { border-color: var(--blue); background: rgba(77,159,255,.05); }
+.dropzone.loaded { border-color: var(--accent); border-style: solid; background: rgba(0,229,160,0.04); }
+.dropzone input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+
+.dz-ico { font-size: 26px; display: block; margin-bottom: 7px; }
+.dz-label { font-size: 11px; color: var(--sub); line-height: 1.5; }
+.dz-label b { display: block; color: var(--text); font-size: 12px; margin-bottom: 2px; }
+
+.loaded-row { display: none; align-items: center; gap: 10px; text-align: left; }
+.dropzone.loaded .loaded-row { display: flex; }
+.dropzone.loaded .dz-ph { display: none; }
+.loaded-ico { font-size: 22px; }
+.loaded-name {
+  font-family: var(--mono); font-size: 11px; color: var(--accent);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px;
+}
+.loaded-meta { font-size: 10px; color: var(--sub); margin-top: 2px; }
+
+/* ── MAPPING INDICATOR ── */
+.mapping-box {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 10px; padding: 18px 22px; margin-bottom: 20px;
+  display: none;
+}
+.mapping-box.show { display: block; }
+.map-title { font-family: var(--mono); font-size: 10px; color: var(--sub); text-transform: uppercase; letter-spacing: .1em; margin-bottom: 12px; }
+
+.map-cols { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.map-chip {
+  background: var(--card2); border: 1px solid var(--border2);
+  border-radius: 6px; padding: 8px 14px;
+  font-family: var(--mono); font-size: 11px; color: var(--text);
+}
+.map-chip span { color: var(--sub); font-size: 10px; display: block; margin-bottom: 2px; }
+.map-chip b { color: var(--accent); }
+.arrow { color: var(--sub); font-size: 18px; }
+
+/* ── STATS ── */
+.stats-row {
+  display: none; grid-template-columns: repeat(3, 1fr);
+  gap: 12px; margin-bottom: 20px;
+}
+.stats-row.show { display: grid; }
+.stat-box { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 14px 18px; }
+.stat-num { font-family: var(--mono); font-size: 24px; font-weight: 700; color: var(--accent); }
+.stat-lbl { font-size: 11px; color: var(--sub); margin-top: 3px; }
+
+/* ── PREVIEW TABLE ── */
+.preview-box {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 10px; overflow: hidden; margin-bottom: 20px; display: none;
+}
+.preview-box.show { display: block; }
+.preview-head {
+  padding: 12px 18px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.preview-head .ph-label { font-family: var(--mono); font-size: 10px; color: var(--sub); text-transform: uppercase; letter-spacing: .1em; }
+.badge-count { background: rgba(0,229,160,.12); color: var(--accent); font-family: var(--mono); font-size: 10px; padding: 3px 10px; border-radius: 4px; }
+.tscroll { overflow-x: auto; max-height: 280px; overflow-y: auto; }
+table { width: 100%; border-collapse: collapse; }
+thead th {
+  background: var(--card2); padding: 9px 14px;
+  font-family: var(--mono); font-size: 9px; letter-spacing: .08em;
+  color: var(--sub); text-transform: uppercase;
+  position: sticky; top: 0; border-bottom: 1px solid var(--border);
+  white-space: nowrap; text-align: left;
+}
+tbody td { padding: 8px 14px; font-size: 12px; border-bottom: 1px solid rgba(255,255,255,.03); white-space: nowrap; }
+tbody tr:last-child td { border-bottom: none; }
+tbody tr:hover td { background: rgba(255,255,255,.02); }
+td.pn { font-family: var(--mono); font-size: 11px; color: var(--blue); }
+td.qty { font-family: var(--mono); font-weight: 700; color: var(--accent); font-size: 13px; }
+
+/* ── LOG ── */
+.log-box {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 8px; padding: 14px 18px; margin-bottom: 16px; display: none;
+}
+.log-box.show { display: block; }
+.log-hd { font-family: var(--mono); font-size: 9px; color: var(--sub); text-transform: uppercase; letter-spacing: .1em; margin-bottom: 8px; }
+.log-line { font-family: var(--mono); font-size: 11px; padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,.03); display: flex; gap: 10px; }
+.log-line:last-child { border-bottom: none; }
+.ll-tag { min-width: 56px; }
+.log-line.ok .ll-tag { color: var(--accent); }
+.log-line.warn .ll-tag { color: var(--warn); }
+.log-line.err .ll-tag { color: var(--err); }
+.ll-msg { color: var(--text); }
+
+/* ── BUTTON ── */
+.btn {
+  width: 100%; padding: 17px;
+  background: var(--accent); color: #060810;
+  border: none; border-radius: 8px;
+  font-family: var(--mono); font-size: 13px; font-weight: 700;
+  letter-spacing: .08em; text-transform: uppercase;
+  cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px;
+  transition: background .2s, transform .15s, box-shadow .2s;
+  margin-bottom: 14px;
+}
+.btn:hover:not(:disabled) { background: #1ffdb0; transform: translateY(-2px); box-shadow: 0 10px 30px rgba(0,229,160,.25); }
+.btn:disabled { background: var(--border); color: var(--sub); cursor: not-allowed; transform: none; box-shadow: none; }
+
+.footnote { text-align: center; font-size: 11px; color: var(--sub); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- HEADER -->
+  <div class="hdr">
+    <div class="pill">Auto Merger</div>
+    <h1>STOK ADI<br><em>Merger Otomatis</em></h1>
+    <p class="sub-title">Upload ADI Pengeluaran → data qtyKeluar otomatis masuk kolom H master</p>
+  </div>
+
+  <!-- UPLOAD -->
+  <div class="upload-grid">
+
+    <div class="ucard" id="uc1">
+      <div class="step-n">STEP 01</div>
+      <div class="step-title">Master STOK ADI</div>
+      <div class="step-hint">File STOK_ADI.xlsx<br>Kolom H akan diisi otomatis</div>
+      <div class="dropzone" id="dz1">
+        <input type="file" accept=".xlsx,.xls" onchange="onFile(event,1)">
+        <div class="dz-ph">
+          <span class="dz-ico">📊</span>
+          <div class="dz-label"><b>STOK_ADI.xlsx</b>Klik atau drag & drop</div>
+        </div>
+        <div class="loaded-row">
+          <span class="loaded-ico">✅</span>
+          <div>
+            <div class="loaded-name" id="fn1">—</div>
+            <div class="loaded-meta" id="fm1">—</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="ucard" id="uc2">
+      <div class="step-n">STEP 02</div>
+      <div class="step-title">ADI Pengeluaran</div>
+      <div class="step-hint">File ADI_PENGELUARAN.xls<br>Kolom B=PartNo, C=qtyKeluar</div>
+      <div class="dropzone" id="dz2">
+        <input type="file" accept=".xlsx,.xls" onchange="onFile(event,2)">
+        <div class="dz-ph">
+          <span class="dz-ico">📋</span>
+          <div class="dz-label"><b>ADI_PENGELUARAN.xls</b>Klik atau drag & drop</div>
+        </div>
+        <div class="loaded-row">
+          <span class="loaded-ico">✅</span>
+          <div>
+            <div class="loaded-name" id="fn2">—</div>
+            <div class="loaded-meta" id="fm2">—</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- MAPPING INFO -->
+  <div class="mapping-box" id="mapBox">
+    <div class="map-title">// Pemetaan Kolom Otomatis</div>
+    <div class="map-cols">
+      <div class="map-chip"><span>ADI_PENGELUARAN</span><b>Kolom B — PartNo</b></div>
+      <div class="arrow">→ cocok →</div>
+      <div class="map-chip"><span>STOK_ADI</span><b>Kolom C — PartNo</b></div>
+      <div class="arrow">→ isi →</div>
+      <div class="map-chip"><span>STOK_ADI</span><b>Kolom H — Del (09)</b></div>
+      <div class="arrow">←</div>
+      <div class="map-chip"><span>ADI_PENGELUARAN</span><b>Kolom C — qtyKeluar</b></div>
+    </div>
+  </div>
+
+  <!-- STATS -->
+  <div class="stats-row" id="statsRow">
+    <div class="stat-box"><div class="stat-num" id="sTotal">—</div><div class="stat-lbl">Baris di STOK ADI</div></div>
+    <div class="stat-box"><div class="stat-num" id="sMatch">—</div><div class="stat-lbl">PartNo cocok & diupdate</div></div>
+    <div class="stat-box"><div class="stat-num" id="sPen">—</div><div class="stat-lbl">Data pengeluaran</div></div>
+  </div>
+
+  <!-- PREVIEW -->
+  <div class="preview-box" id="prevBox">
+    <div class="preview-head">
+      <span class="ph-label">// Preview data yang akan masuk kolom H</span>
+      <span class="badge-count" id="prevCount">0</span>
+    </div>
+    <div class="tscroll">
+      <table>
+        <thead>
+          <tr>
+            <th>No</th><th>Part No</th><th>Description</th>
+            <th>Stok Akhir (E)</th><th>qtyKeluar → Kolom H</th>
+          </tr>
+        </thead>
+        <tbody id="prevBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- LOG -->
+  <div class="log-box" id="logBox">
+    <div class="log-hd">// Log proses</div>
+    <div id="logLines"></div>
+  </div>
+
+  <!-- BUTTON -->
+  <button class="btn" id="btnGo" onclick="doMerge()" disabled>
+    ⚡ PROSES & DOWNLOAD HASIL
+  </button>
+  <p class="footnote">Semua proses di browser — data tidak dikirim ke server manapun</p>
+
+</div>
+<script>
+let wb1 = null, wb2 = null;
+
+/* ── HELPERS ── */
+function cell(ws, c, r) { // c,r 0-based
+  const a = XLSX.utils.encode_cell({c,r});
+  const x = ws[a];
+  if (!x) return '';
+  return x.v !== undefined ? x.v : '';
+}
+
+function setCell(ws, c, r, v) {
+  const a = XLSX.utils.encode_cell({c,r});
+  ws[a] = { v, t: (typeof v === 'number') ? 'n' : 's' };
+  const rng = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+  if (c > rng.e.c) rng.e.c = c;
+  if (r > rng.e.r) rng.e.r = r;
+  ws['!ref'] = XLSX.utils.encode_range(rng);
+}
+
+function wsRange(ws) {
+  return ws['!ref'] ? XLSX.utils.decode_range(ws['!ref']) : {s:{r:0,c:0},e:{r:0,c:0}};
+}
+
+function log(type, tag, msg) {
+  const d = document.createElement('div');
+  d.className = `log-line ${type}`;
+  d.innerHTML = `<span class="ll-tag">[${tag}]</span><span class="ll-msg">${msg}</span>`;
+  document.getElementById('logLines').appendChild(d);
+  document.getElementById('logBox').classList.add('show');
+}
+
+/* ── LOAD FILE ── */
+function onFile(ev, n) {
+  const f = ev.target.files[0];
+  if (!f) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const wb = XLSX.read(new Uint8Array(e.target.result), {type:'array'});
+      if (n === 1) {
+        wb1 = wb;
+        document.getElementById('fn1').textContent = f.name;
+        document.getElementById('fm1').textContent = `${wb.SheetNames.length} sheet · ${(f.size/1024).toFixed(1)} KB`;
+        document.getElementById('uc1').className = 'ucard done';
+        document.getElementById('dz1').className = 'dropzone loaded';
+      } else {
+        wb2 = wb;
+        document.getElementById('fn2').textContent = f.name;
+        document.getElementById('fm2').textContent = `${wb.SheetNames.length} sheet · ${(f.size/1024).toFixed(1)} KB`;
+        document.getElementById('uc2').className = 'ucard done';
+        document.getElementById('dz2').className = 'dropzone loaded';
+      }
+      if (wb1 && wb2) { document.getElementById('btnGo').disabled = false; buildPreview(); }
+    } catch(err) { alert('Gagal baca file: ' + err.message); }
+  };
+  reader.readAsArrayBuffer(f);
+}
+
+/* ── DETECT COLUMNS ── */
+// ADI Pengeluaran: cari kolom PartNo & qtyKeluar dari header row
+function detectPengeluaranCols(ws) {
+  const rng = wsRange(ws);
+  // Cari header row (baris pertama yang ada text "PartNo" atau "partno" atau "Part")
+  for (let r = rng.s.r; r <= Math.min(rng.s.r + 5, rng.e.r); r++) {
+    for (let c = rng.s.c; c <= rng.e.c; c++) {
+      const v = String(cell(ws, c, r)).toLowerCase().trim();
+      if (v === 'partno' || v === 'part no' || v === 'kode' || v === 'part_no') {
+        // Found header row — scan for qty col
+        let qtyCol = -1;
+        for (let cc = rng.s.c; cc <= rng.e.c; cc++) {
+          const vv = String(cell(ws, cc, r)).toLowerCase().trim();
+          if (vv.includes('qty') || vv.includes('keluar') || vv.includes('jumlah') || vv.includes('quantity')) {
+            qtyCol = cc; break;
+          }
+        }
+        return { headerRow: r, partnoCol: c, qtyCol: qtyCol >= 0 ? qtyCol : c + 1 };
+      }
+    }
+  }
+  // Fallback: asumsi row 0 = header, B=PartNo(col1), C=qty(col2)
+  return { headerRow: 0, partnoCol: 1, qtyCol: 2 };
+}
+
+function buildMap(ws) {
+  const { headerRow, partnoCol, qtyCol } = detectPengeluaranCols(ws);
+  const rng = wsRange(ws);
+  const map = {};
+  for (let r = headerRow + 1; r <= rng.e.r; r++) {
+    const pn = String(cell(ws, partnoCol, r) || '').trim();
+    const qty = cell(ws, qtyCol, r);
+    if (pn && qty !== '' && qty !== null && qty !== undefined) {
+      map[pn] = qty;
+    }
+  }
+  return { map, headerRow, partnoCol, qtyCol };
+}
+
+// STOK ADI: cari header row & kolom C (PartNo) dan H (Del-09)
+function detectMasterCols(ws) {
+  const rng = wsRange(ws);
+  // Cari baris header utama yang ada "PartNo"
+  for (let r = rng.s.r; r <= Math.min(rng.s.r + 5, rng.e.r); r++) {
+    for (let c = rng.s.c; c <= rng.e.c; c++) {
+      const v = String(cell(ws, c, r)).toLowerCase().trim();
+      if (v === 'partno' || v === 'part no') {
+        // Found — H col is col index 7 (0-based) in Excel sheet
+        return { headerRow: r, partnoCol: c, targetCol: 7 }; // H = index 7
+      }
+    }
+  }
+  return { headerRow: 0, partnoCol: 2, targetCol: 7 }; // fallback
+}
+
+/* ── PREVIEW ── */
+function buildPreview() {
+  const ws2 = wb2.Sheets[wb2.SheetNames[0]];
+  const { map } = buildMap(ws2);
+
+  const ws1 = wb1.Sheets[wb1.SheetNames[0]];
+  const { headerRow, partnoCol } = detectMasterCols(ws1);
+  const rng = wsRange(ws1);
+
+  const tbody = document.getElementById('prevBody');
+  tbody.innerHTML = '';
+  let matched = 0, total = 0;
+
+  for (let r = headerRow + 1; r <= rng.e.r; r++) {
+    const pn = String(cell(ws1, partnoCol, r) || '').trim();
+    if (!pn) continue;
+    total++;
+    const qty = map[pn];
+    if (qty !== undefined) {
+      matched++;
+      const no   = cell(ws1, 1, r);
+      const desc = String(cell(ws1, 3, r) || '').trim();
+      const stok = cell(ws1, 4, r);
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${no}</td><td class="pn">${pn}</td><td>${desc || '—'}</td><td>${stok !== '' ? stok : '—'}</td><td class="qty">${qty}</td>`;
+      tbody.appendChild(tr);
+    }
+  }
+
+  document.getElementById('sTotal').textContent = total;
+  document.getElementById('sMatch').textContent = matched;
+  document.getElementById('sPen').textContent = Object.keys(map).length;
+  document.getElementById('prevCount').textContent = `${matched} baris akan diupdate`;
+
+  document.getElementById('mapBox').classList.add('show');
+  document.getElementById('statsRow').classList.add('show');
+  document.getElementById('prevBox').classList.add('show');
+}
+
+/* ── MERGE & DOWNLOAD ── */
+function doMerge() {
+  document.getElementById('logLines').innerHTML = '';
+
+  const ws2 = wb2.Sheets[wb2.SheetNames[0]];
+  const { map, partnoCol: pc2, qtyCol: qc2 } = buildMap(ws2);
+  log('ok', 'READ', `ADI Pengeluaran: ${Object.keys(map).length} data pengeluaran ditemukan`);
+  for (const [k, v] of Object.entries(map)) log('ok', 'DATA', `${k}  →  ${v}`);
+
+  const ws1 = wb1.Sheets[wb1.SheetNames[0]];
+  const { headerRow, partnoCol } = detectMasterCols(ws1);
+  const rng = wsRange(ws1);
+
+  let updated = 0, notFound = [];
+
+  for (let r = headerRow + 1; r <= rng.e.r; r++) {
+    const pn = String(cell(ws1, partnoCol, r) || '').trim();
+    if (!pn) continue;
+    if (map[pn] !== undefined) {
+      setCell(ws1, 7, r, map[pn]); // kolom H = index 7 (0-based)
+      updated++;
+    }
+  }
+
+  // Cek PartNo di pengeluaran yang tidak ada di master
+  const masterSet = new Set();
+  for (let r = headerRow + 1; r <= rng.e.r; r++) {
+    const pn = String(cell(ws1, partnoCol, r) || '').trim();
+    if (pn) masterSet.add(pn);
+  }
+  for (const pn of Object.keys(map)) {
+    if (!masterSet.has(pn)) notFound.push(pn);
+  }
+
+  log('ok', 'MERGE', `${updated} baris berhasil diupdate di kolom H`);
+  for (const pn of notFound) log('warn', 'MISS', `PartNo "${pn}" tidak ada di STOK ADI master`);
+  log('ok', 'DONE', 'File STOK_ADI_HASIL.xlsx siap didownload!');
+
+  XLSX.writeFile(wb1, 'STOK_ADI_HASIL.xlsx');
+}
+</script>
+</body>
+</html>
